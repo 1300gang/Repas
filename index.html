@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planificateur Famille</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header card">
+            <div>
+                <h1>🍴 Planificateur Famille</h1>
+                <div class="header-subtitle">Batch Cooking • 4 Pers • Import/Export</div>
+            </div>
+            <div class="btn-group">
+                <button class="btn-secondary" onclick="toggleConfig()">⚙️ Config</button>
+                <div style="width: 1px; height: 24px; background: #cbd5e1;"></div>
+                <button class="btn-icon" onclick="downloadBackup()" title="Télécharger sauvegarde">💾</button>
+                <button class="btn-icon" onclick="document.getElementById('fileInput').click()" title="Restaurer">📤</button>
+                <input type="file" id="fileInput" accept=".json" style="display: none;" onchange="handleImport(event)">
+            </div>
+        </div>
+
+        <!-- Modal Ingrédients -->
+        <div id="ingredientsModal" class="modal" onclick="closeModal()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span id="modalRecipeName"></span>
+                    <button onclick="closeModal()" style="background: none; border: none; color: white; cursor: pointer; font-size: 1.25rem;">×</button>
+                </div>
+                <div class="modal-body" id="modalBody"></div>
+            </div>
+        </div>
+
+        <!-- Config Panel -->
+        <div id="configPanel" class="card config-panel hidden">
+            <div class="config-tabs">
+                <button class="tab-btn active" onclick="switchTab('products')">Gérer Produits</button>
+                <button class="tab-btn" onclick="switchTab('recipes')">Ajouter Recette</button>
+            </div>
+            
+            <div id="productsTab">
+                <p style="font-size: 0.875rem; color: #64748b; margin-bottom: 1rem;">
+                    Supprimez des produits de la liste par défaut (croix rouge) ou ajoutez-en via les boutons "+" dans la grille principale.
+                </p>
+                <div class="product-list" id="productList"></div>
+            </div>
+
+            <div id="recipesTab" class="hidden">
+                <div class="form-row">
+                    <input type="text" id="recipeName" placeholder="Nom recette">
+                    <select id="recipeTheme">
+                        <option>Indien</option>
+                        <option>Américain</option>
+                        <option selected>Français</option>
+                        <option>Asiatique</option>
+                        <option>Africain</option>
+                        <option>Sud-Américain</option>
+                        <option>Italien</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <select id="recipeType">
+                        <option value="Midi">Midi</option>
+                        <option value="Soir">Soir</option>
+                    </select>
+                    <input type="number" id="recipeCost" placeholder="Coût (€)" value="10">
+                </div>
+                <div class="ingredient-form">
+                    <h4>Ingrédients</h4>
+                    <div id="ingredientsList"></div>
+                    <button class="add-ingredient-btn" onclick="addIngredientField()">+ Ingrédient</button>
+                </div>
+                <button class="btn-success" style="width: 100%; margin-top: 1rem;" onclick="saveRecipe()">💾 Enregistrer</button>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <!-- Planning Section -->
+            <div>
+                <button class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;" onclick="randomizePlanning()">
+                    🔀 Remplir le planning
+                </button>
+
+                <div class="card" id="planningSection"></div>
+
+                <!-- Essentials Section -->
+                <div class="card" style="margin-top: 1.5rem; padding: 1.5rem;">
+                    <h3 style="font-weight: 700; margin-bottom: 1rem;">📦 Ajouter à la liste</h3>
+                    <div class="essentials-grid" id="essentialsGrid"></div>
+                </div>
+            </div>
+
+            <!-- Shopping List -->
+            <div>
+                <div class="card shopping-list">
+                    <div class="shopping-header">
+                        <h2 style="font-weight: 700; font-size: 1.125rem;">🛒 Ma Liste</h2>
+                    </div>
+                    <div class="shopping-actions">
+                        <button class="btn-success" style="flex: 1;" onclick="generateShoppingList()">🔄 Générer</button>
+                        <button class="btn-secondary" onclick="copyToNotion()" title="Copier pour Notion">📋</button>
+                    </div>
+                    <div class="shopping-content" id="shoppingContent">
+                        <div class="empty-state">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                            </svg>
+                            <p style="font-size: 0.875rem; text-align: center;">Générez la liste !</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="data.js"></script>
+    <script>
+
+        // État de l'application
+        let recipes = [];
+        let essentials = [];
+        let planning = [];
+        let shoppingList = {};
+        let checkedListItems = {};
+        let newRecipeIngredients = [{ item: "", qty: "", unit: "g", rayon: "Épicerie" }];
+        let lastGeneratedPlanning = null;
+
+        // Initialisation
+        function init() {
+            loadData();
+            renderPlanning();
+            renderEssentials();
+            renderProductList();
+            addIngredientField();
+            
+            // Afficher la liste si elle existe
+            if (shoppingList.items && Object.keys(shoppingList.items).length > 0) {
+                renderShoppingList();
+            }
+        }
+
+        function loadData() {
+            const savedRecipes = localStorage.getItem('recipes_v4');
+            recipes = savedRecipes ? JSON.parse(savedRecipes) : defaultRecipes;
+
+            const savedEssentials = localStorage.getItem('essentials_v4');
+            essentials = savedEssentials ? JSON.parse(savedEssentials) : defaultEssentials;
+
+            const savedPlanning = localStorage.getItem('planning_v4');
+            if (savedPlanning) {
+                planning = JSON.parse(savedPlanning);
+            } else {
+                planning = weekConfig.map(d => ({
+                    day: d.day,
+                    lunch: { recipeId: "", active: true },
+                    dinner: { recipeId: "", active: true }
+                }));
+            }
+
+            // Charger la liste de courses sauvegardée
+            const savedShoppingList = localStorage.getItem('shoppingList_v4');
+            if (savedShoppingList) {
+                shoppingList = JSON.parse(savedShoppingList);
+            }
+
+            const savedCheckedItems = localStorage.getItem('checkedListItems_v4');
+            if (savedCheckedItems) {
+                checkedListItems = JSON.parse(savedCheckedItems);
+            }
+
+            const savedLastPlanning = localStorage.getItem('lastGeneratedPlanning_v4');
+            if (savedLastPlanning) {
+                lastGeneratedPlanning = savedLastPlanning;
+            }
+
+            // Log pour vérifier les données chargées
+            console.log("Données chargées :", {
+                recipes,
+                essentials,
+                exampleRecipe: recipes.length > 0 ? recipes[0] : null
+            });
+        }
+
+        function saveData() {
+            localStorage.setItem('recipes_v4', JSON.stringify(recipes));
+            localStorage.setItem('essentials_v4', JSON.stringify(essentials));
+            localStorage.setItem('planning_v4', JSON.stringify(planning));
+        }
+
+        // Config Panel
+        function toggleConfig() {
+            const panel = document.getElementById('configPanel');
+            panel.classList.toggle('hidden');
+        }
+
+        function switchTab(tab) {
+            const tabs = document.querySelectorAll('.tab-btn');
+            tabs.forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            document.getElementById('productsTab').classList.toggle('hidden', tab !== 'products');
+            document.getElementById('recipesTab').classList.toggle('hidden', tab !== 'recipes');
+        }
+
+        // Planning
+        function renderPlanning() {
+            const container = document.getElementById('planningSection');
+            container.innerHTML = '';
+
+            planning.forEach((day, idx) => {
+                const config = weekConfig[idx];
+                const row = document.createElement('div');
+                row.className = 'planning-row';
+                
+                let html = `
+                    <div class="planning-header">
+                        <span class="day-name">${day.day}</span>
+                        ${config.lunchBatch ? `<span class="batch-badge">Midi: 2 Adultes (${config.lunchBatch})</span>` : ''}
+                    </div>
+                    <div class="meals-grid">
+                `;
+
+                ['lunch', 'dinner'].forEach(type => {
+                    const isLunch = type === 'lunch';
+                    const meal = day[type];
+                    const theme = isLunch ? config.lunchTheme : config.dinnerTheme;
+                    
+                    if (!isLunch && theme === "Reste") {
+                        html += `<div class="meal-box inactive" style="font-style: italic; color: #94a3b8;">Soir : Restes / Impro</div>`;
+                        return;
+                    }
+
+                    const recipe = recipes.find(r => r.id === meal.recipeId);
+                    
+                    html += `
+                        <div class="meal-box ${meal.active ? '' : 'inactive'}">
+                            <div class="meal-header">
+                                <span class="meal-label ${isLunch ? 'lunch' : 'dinner'}">${isLunch ? 'Midi' : 'Soir'} • ${theme}</span>
+                                <input type="checkbox" ${!meal.active ? 'checked' : ''} onchange="toggleMealActive(${idx}, '${type}')">
+                            </div>
+                    ${meal.active ? `
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <select id="meal-${idx}-${type}" name="meal-${idx}-${type}" style="flex: 1;" onchange="handleRecipeSelect(${idx}, '${type}', this.value)">
+                                <option value="">-- Choisir une recette --</option>
+                                ${recipes.filter(r => r.type === (isLunch ? 'Midi' : 'Soir') && r.theme === theme).map(r => `
+                                    <option value="${r.id}" ${r.id === meal.recipeId ? 'selected' : ''}>${r.name}</option>
+                                `).join('')}
+                            </select>
+                            
+                            ${meal.recipeId ? `
+                                <button class="btn-secondary" style="padding: 0.25rem 0.5rem;" onclick="showIngredients(${meal.recipeId})" title="Voir ingrédients">👁️</button>
+                            ` : ''}
+                        </div>
+                    ` : ''}
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+                row.innerHTML = html;
+                container.appendChild(row);
+            });
+        }
+
+        function handleRecipeSelect(dayIndex, type, recipeId) {
+            const val = recipeId ? parseInt(recipeId) : "";
+            const targetBatch = weekConfig[dayIndex][type === 'lunch' ? 'lunchBatch' : 'none'];
+            
+            planning[dayIndex][type].recipeId = val;
+
+            if (type === 'lunch' && targetBatch) {
+                weekConfig.forEach((cfg, idx) => {
+                    if (cfg.lunchBatch === targetBatch) {
+                        planning[idx].lunch.recipeId = val;
+                    }
+                });
+            }
+
+            saveData();
+            renderPlanning();
+        }
+
+        function toggleMealActive(dayIndex, type) {
+            planning[dayIndex][type].active = !planning[dayIndex][type].active;
+            saveData();
+            renderPlanning();
+        }
+
+function randomizePlanning() {
+            // CORRECTION : On repart de zéro pour le mélange, on ne regarde pas ce qui est déjà là
+            const usedIds = new Set();
+
+            // Pas de boucle ici pour remplir usedIds avec le planning actuel !
+
+            const getRandomId = (theme, type) => {
+                let pool = recipes.filter(r => r.theme === theme && r.type === type);
+                
+                // Exception : si le thème est Français Midi, on tape dans tout le pool Français
+                if (type === "Midi" && theme === "Français") {
+                    pool = recipes.filter(r => r.theme === "Français");
+                }
+                
+                // On essaie de prendre une recette pas encore utilisée
+                const available = pool.filter(r => !usedIds.has(r.id));
+                // Si toutes sont utilisées, on réutilise le pool entier
+                const finalPool = available.length > 0 ? available : pool;
+                
+                if (finalPool.length === 0) return "";
+                
+                const r = finalPool[Math.floor(Math.random() * finalPool.length)];
+                usedIds.add(r.id);
+                return r.id;
+            };
+
+            const batchMap = {};
+
+            planning.forEach((day, idx) => {
+                const config = weekConfig[idx];
+
+                // Gestion Midi (Batch cooking)
+                if (day.lunch.active && config.lunchBatch) {
+                    if (!batchMap[config.lunchBatch]) {
+                        // On force un nouveau tirage aléatoire
+                        batchMap[config.lunchBatch] = getRandomId(config.lunchTheme, "Midi");
+                    }
+                    day.lunch.recipeId = batchMap[config.lunchBatch];
+                }
+
+                // Gestion Soir
+                if (day.dinner.active && config.dinnerTheme !== "Reste") {
+                    // On force un nouveau tirage
+                    day.dinner.recipeId = getRandomId(config.dinnerTheme, "Soir");
+                }
+            });
+
+            saveData();
+            renderPlanning();
+        }
+        
+        // Essentials
+        function renderEssentials() {
+            const container = document.getElementById('essentialsGrid');
+            const categories = {};
+            essentials.forEach(e => {
+                if (!categories[e.category]) {
+                    categories[e.category] = e.category.toLowerCase().replace(/ /g, '-');
+                }
+            });
+            
+            container.innerHTML = '';
+            
+            Object.entries(categories).forEach(([cat, className]) => {
+                const items = essentials.filter(e => e.category === cat);
+                const div = document.createElement('div');
+                div.className = `essentials-category ${className}`;
+                
+                let html = `
+                    <div class="category-header">
+                        <h4 class="category-title">${cat}</h4>
+                        <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" onclick="addProductToCategory('${cat}')">+ Ajout</button>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                `;
+                
+                items.forEach((item, i) => {
+                    const idx = essentials.indexOf(item);
+                    html += `
+                        <label class="checkbox-label">
+                            <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleEssentialNeed(${idx})">
+                            <span style="font-size: 0.875rem; ${item.checked ? 'font-weight: 500;' : 'color: #64748b;'}">${item.item}</span>
+                        </label>
+                    `;
+                });
+                
+                html += '</div>';
+                div.innerHTML = html;
+                container.appendChild(div);
+            });
+        }
+
+        function toggleEssentialNeed(index) {
+            essentials[index].checked = !essentials[index].checked;
+            saveData();
+            renderEssentials();
+        }
+
+        function addProductToCategory(category) {
+            const name = prompt(`Nom du produit à ajouter dans ${category} :`);
+            if (!name) return;
+            
+            const rayon = prompt(`Rayon Lidl pour "${name}" ?\n\nRayons disponibles :\n${RAYONS.join('\n')}`);
+            if (!rayon) return;
+            
+            essentials.push({ 
+                item: name, 
+                category: category, 
+                rayon: rayon,
+                checked: true 
+            });
+            saveData();
+            renderEssentials();
+            renderProductList();
+        }
+
+        // Product List
+        function renderProductList() {
+            const container = document.getElementById('productList');
+            container.innerHTML = '';
+            
+            essentials.forEach((item, idx) => {
+                const tag = document.createElement('div');
+                tag.className = 'product-tag';
+                tag.innerHTML = `
+                    <span>${item.item}</span>
+                    <button class="remove-btn" onclick="removeEssential(${idx})">×</button>
+                `;
+                container.appendChild(tag);
+            });
+        }
+
+        function removeEssential(idx) {
+            if (confirm("Supprimer ce produit définitivement ?")) {
+                essentials.splice(idx, 1);
+                saveData();
+                renderEssentials();
+                renderProductList();
+            }
+        }
+
+        // Recipe Management
+        function addIngredientField() {
+            const container = document.getElementById('ingredientsList');
+            const index = newRecipeIngredients.length;
+            
+            const row = document.createElement('div');
+            row.className = 'ingredient-input-row';
+            // CORRECTION : Ajout des attributs name
+            row.innerHTML = `
+                <input type="text" name="ing_name_${index}" placeholder="Nom" data-idx="${index}" data-field="item" autocomplete="off">
+                <input type="text" name="ing_qty_${index}" placeholder="Qté" data-idx="${index}" data-field="qty" autocomplete="off">
+                <select name="ing_rayon_${index}" data-idx="${index}" data-field="rayon">
+                    ${RAYONS.map(r => `<option value="${r}">${r}</option>`).join('')}
+                </select>
+            `;
+            
+            container.appendChild(row);
+            newRecipeIngredients.push({ item: "", qty: "", unit: "g", rayon: "Épicerie" });
+            
+            row.querySelectorAll('input, select').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const idx = parseInt(e.target.dataset.idx);
+                    const field = e.target.dataset.field;
+                    newRecipeIngredients[idx][field] = e.target.value;
+                });
+            });
+        }
+
+        function saveRecipe() {
+            const name = document.getElementById('recipeName').value;
+            if (!name) return alert("Nom manquant");
+            
+            const recipe = {
+                id: Date.now(),
+                name: name,
+                theme: document.getElementById('recipeTheme').value,
+                type: document.getElementById('recipeType').value,
+                cost: parseInt(document.getElementById('recipeCost').value),
+                ingredients: newRecipeIngredients.filter(i => i.item !== "")
+            };
+            
+            recipes.push(recipe);
+            saveData();
+            
+            document.getElementById('recipeName').value = '';
+            document.getElementById('recipeCost').value = '10';
+            document.getElementById('ingredientsList').innerHTML = '';
+            newRecipeIngredients = [{ item: "", qty: "", unit: "g", rayon: "Épicerie" }];
+            addIngredientField();
+            
+            renderPlanning();
+            alert("Recette ajoutée !");
+        }
+
+        // Shopping List
+        function generateShoppingList() {
+            // Vérifier si une liste existe déjà
+            if (shoppingList.items && Object.keys(shoppingList.items).length > 0) {
+                const confirm = window.confirm(
+                    "⚠️ Une liste de courses existe déjà !\n\n" +
+                    "Voulez-vous vraiment la REMPLACER par une nouvelle liste ?\n\n" +
+                    "Cette action effacera votre liste actuelle et toutes les cases cochées."
+                );
+                
+                if (!confirm) {
+                    return; // Annuler la génération
+                }
+            }
+
+            const list = {};
+            let total = 0;
+
+            planning.forEach((day, idx) => {
+                const config = weekConfig[idx];
+                ['lunch', 'dinner'].forEach(type => {
+                    const meal = day[type];
+                    let shouldCount = true;
+                    
+                    if (type === 'lunch' && config.lunchBatch) {
+                        const isFirstOfBatch = (idx === 0) || (idx === 3) || (idx === 5);
+                        if (!isFirstOfBatch) shouldCount = false;
+                    }
+
+                    if (meal.active && meal.recipeId && shouldCount) {
+                        const recipe = recipes.find(r => r.id === meal.recipeId);
+                        if (recipe) {
+                            total += recipe.cost || 0;
+                            recipe.ingredients.forEach(ing => {
+                                const key = `${ing.rayon}_${ing.item}_${ing.unit}`;
+                                if (!list[key]) {
+                                    list[key] = { ...ing, qty: 0 };
+                                }
+                                list[key].qty += parseFloat(ing.qty);
+                            });
+                        }
+                    }
+                });
+            });
+
+            essentials.filter(e => e.checked).forEach(e => {
+                // Utiliser le rayon défini dans l'objet, ou "Épicerie Salée" par défaut
+                const finalRayon = e.rayon || "Épicerie Salée";
+
+                const uniqueKey = `Extra_${e.item}`;
+                if (!list[uniqueKey]) {
+                    list[uniqueKey] = { item: e.item, qty: 1, unit: "u", rayon: finalRayon, isExtra: true };
+                } else {
+                    list[uniqueKey].qty += 1;
+                }
+                total += 3;
+            });
+
+            shoppingList = { items: list, total };
+            checkedListItems = {};
+            lastGeneratedPlanning = JSON.stringify(planning);
+            
+            // Sauvegarder la liste
+            localStorage.setItem('shoppingList_v4', JSON.stringify(shoppingList));
+            localStorage.setItem('checkedListItems_v4', JSON.stringify(checkedListItems));
+            localStorage.setItem('lastGeneratedPlanning_v4', lastGeneratedPlanning);
+            
+            renderShoppingList();
+        }
+
+        function renderShoppingList() {
+            const container = document.getElementById('shoppingContent');
+            
+            if (!shoppingList.items || Object.keys(shoppingList.items).length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                        </svg>
+                        <p style="font-size: 0.875rem; text-align: center;">Générez la liste !</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const byRayon = {};
+            Object.values(shoppingList.items).forEach(item => {
+                if (!byRayon[item.rayon]) byRayon[item.rayon] = [];
+                byRayon[item.rayon].push(item);
+            });
+
+            let html = `
+                <div class="total-box">
+                    <span class="total-label">Total Est.</span>
+                    <span class="total-amount">${shoppingList.total.toFixed(0)} €</span>
+                </div>
+            `;
+
+            Object.entries(byRayon).forEach(([rayon, items]) => {
+                html += `<div class="rayon-section">`;
+                html += `<div class="rayon-header">${rayon}</div>`;
+                html += `<div>`;
+                
+                items.forEach(ing => {
+                    const key = `${ing.item}_${ing.rayon}`;
+                    const isChecked = checkedListItems[key];
+                    html += `
+                        <label class="item-row ${isChecked ? 'checked' : ''}">
+                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleShoppingCheck('${key}')">
+                            <div class="item-details">
+                                <div class="item-name ${isChecked ? 'checked' : ''}">${ing.item}</div>
+                                <div class="item-qty">${parseFloat(ing.qty.toFixed(2))} ${ing.unit !== 'u' ? ing.unit : ''}</div>
+                            </div>
+                        </label>
+                    `;
+                });
+                
+                html += `</div></div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function toggleShoppingCheck(key) {
+            checkedListItems[key] = !checkedListItems[key];
+            
+            // Sauvegarder l'état des cases cochées
+            localStorage.setItem('checkedListItems_v4', JSON.stringify(checkedListItems));
+            
+            renderShoppingList();
+        }
+
+        // Modal
+        function showIngredients(recipeId) {
+            const recipe = recipes.find(r => r.id === recipeId);
+            if (!recipe) return;
+
+            document.getElementById('modalRecipeName').textContent = recipe.name;
+            
+            let html = '';
+            recipe.ingredients.forEach(ing => {
+                html += `
+                    <div class="ingredient-row">
+                        <span>${ing.item}</span>
+                        <span style="font-weight: 700;">${ing.qty}${ing.unit}</span>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('ingredientsModal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('ingredientsModal').classList.remove('show');
+        }
+
+        // Export/Import
+        function downloadBackup() {
+            const data = { recipes, planning, essentials, date: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "backup_courses_famille.json";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function handleImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.recipes) recipes = data.recipes;
+                    if (data.planning) planning = data.planning;
+                    if (data.essentials) essentials = data.essentials;
+                    saveData();
+                    renderPlanning();
+                    renderEssentials();
+                    renderProductList();
+                    alert("✅ Données restaurées !");
+                } catch (err) {
+                    alert("❌ Erreur fichier");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function copyToNotion() {
+            if (!shoppingList.items) return;
+            
+            let text = `🛒 LISTE DE COURSES\n\n`;
+            const byRayon = {};
+            Object.values(shoppingList.items).forEach(i => {
+                if (!byRayon[i.rayon]) byRayon[i.rayon] = [];
+                byRayon[i.rayon].push(i);
+            });
+            
+            Object.entries(byRayon).forEach(([rayon, items]) => {
+                text += `__${rayon.toUpperCase()}__\n`;
+                items.forEach(i => text += `[ ] ${i.item} (${i.qty} ${i.unit !== "u" ? i.unit : ""})\n`);
+                text += "\n";
+            });
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert("📋 Copié pour Notion/Keep !");
+        }
+
+        // Initialiser l'app au chargement
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
