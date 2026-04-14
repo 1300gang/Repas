@@ -124,4 +124,4 @@
             { day: "Dimanche", lunchTheme: "Français", lunchBatch: "Batch C", dinnerTheme: "Reste" }
         ];
 
-        const RAYONS = ["Fruits & Légumes", "Boulangerie/Pâtisserie", "Épicerie Salée", "Épicerie Sucrée", "Boissons", "Surgelés", "Produits frais", "Crèmerie", "Viande/Poisson", "Traiteur/Fromage", "Hygiène/Beauté", "Entretien", "Bazar/Textile"];
+        const RAYONS = ["Fruits & Légumes", "Boulangerie/Pâtisserie", "Épicerie Salée", "Épicerie Sucrée", "Hygiène/Beauté", "Entretien", "Bazar/Textile", "Boissons", "Surgelés", "Produits frais", "Crèmerie", "Viande/Poisson", "Traiteur/Fromage"];
