@@ -581,7 +581,9 @@ function randomizePlanning() {
                 </div>
             `;
 
-            Object.entries(byRayon).forEach(([rayon, items]) => {
+            const rayonOrder = [...RAYONS, ...Object.keys(byRayon).filter(r => !RAYONS.includes(r))];
+            rayonOrder.filter(r => byRayon[r]).forEach(rayon => {
+                const items = byRayon[rayon];
                 html += `<div class="rayon-section">`;
                 html += `<div class="rayon-header">${rayon}</div>`;
                 html += `<div>`;
@@ -686,8 +688,10 @@ function randomizePlanning() {
                 if (!byRayon[i.rayon]) byRayon[i.rayon] = [];
                 byRayon[i.rayon].push(i);
             });
-            
-            Object.entries(byRayon).forEach(([rayon, items]) => {
+
+            const rayonOrder = [...RAYONS, ...Object.keys(byRayon).filter(r => !RAYONS.includes(r))];
+            rayonOrder.filter(r => byRayon[r]).forEach(rayon => {
+                const items = byRayon[rayon];
                 text += `__${rayon.toUpperCase()}__\n`;
                 items.forEach(i => text += `[ ] ${i.item} (${i.qty} ${i.unit !== "u" ? i.unit : ""})\n`);
                 text += "\n";
